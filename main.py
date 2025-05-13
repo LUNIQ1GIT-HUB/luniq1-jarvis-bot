@@ -43,7 +43,21 @@ def handle_test(message):
     else:
         bot.send_message(message.chat.id, "Kein Zugriff auf die Google Tabelle.")
 
-@bot.message_handler(func=lambda message: True)
+@bot.message_handler(func=lambda message: message.text is not None)
+def handle_all_messages(message):
+    if sheet:
+        try:
+            user = f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip()
+            text = message.text
+            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            sheet.append_row([user, text, now])
+            bot.send_message(message.chat.id, "Gespeichert!")
+            print(f"Nachricht gespeichert: {user} | {text} | {now}")
+        except Exception as e:
+            bot.send_message(message.chat.id, f"Fehler beim Speichern: {str(e)}")
+            print(f"Fehler beim Speichern: {str(e)}")
+    else:
+        bot.send_message(message.chat.id, "Fehler: Tabelle nicht geladen.")
 def handle_message(message):
     if sheet:
         try:
