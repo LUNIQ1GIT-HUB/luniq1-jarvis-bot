@@ -1,76 +1,51 @@
-import telebot
-import json
 import os
+import json
+import logging
 import datetime
-from oauth2client.service_account import ServiceAccountCredentials
 import gspread
+from google.oauth2.service_account import Credentials
+from aiogram import Bot, Dispatcher, types
+from aiogram.utils import executor
 
-# Telegram Bot Token
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
+# === Logging aktivieren ===
+logging.basicConfig(level=logging.INFO)
 
-# Debug-Nachrichten an Konsole
-print("Starte Bot...")
+# === Telegram Bot Token & Google Sheets Setup ===
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+SPREADSHEET_ID = "14d4S1lpXz_vEZa8BnAwISzAjiWia6XmCH4T9KcxOsBo"
+SHEET_NAME = "LUNIQ1_Memory_Main"
 
-# Google Sheets Setup
-try:
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    credentials = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials, scope)
-    client = gspread.authorize(creds)
-    print("Google Sheets erfolgreich autorisiert.")
+# === Google Credentials aus Umgebungsvariable laden ===
+google_creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
+scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+credentials = Credentials.from_service_account_info(google_creds_dict, scopes=scopes)
+gc = gspread.authorize(credentials)
+worksheet = gc.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
 
-    SPREADSHEET_NAME = "LUNIQ1_Memory_Main"  # 100 % korrekt?
-    sheet = client.open(SPREADSHEET_NAME).sheet1
-    print("Zugriff auf Tabelle erfolgreich.")
+# === Telegram Bot Setup ===
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(bot)
 
-except Exception as e:
-    print("Fehler beim Google Sheets Zugriff:")
-    print(str(e))
-    sheet = None
+# === Nachrichtenbehandlung ===
+@dp.message_handler()
+async def handle_message(message: types.Message):
+    try:
+        now = datetime.datetime.now()
+        data = [
+            now.strftime("%d.%m.%Y"),         # A: Datum
+            now.strftime("%H:%M:%S"),         # B: Zeit
+            message.from_user.full_name,      # C: Sender
+            message.text,                     # D: Inhalt
+            "",                               # E: Reaktion
+            "",                               # F: Kategorie
+            ""                                # G: Gültig bis
+        ]
+        worksheet.append_row(data)
+        await message.reply("✅ Gespeichert.")
+    except Exception as e:
+        logging.error(f"Fehler beim Speichern in Google Sheets: {e}")
+        await message.reply("❌ Fehler beim Speichern.")
 
-@bot.message_handler(commands=['test'])
-def handle_test(message):
-    if sheet:
-        try:
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            sheet.append_row(["DEBUG-User", "TEST erfolgreich", now])
-            bot.send_message(message.chat.id, "Test-Eintrag wurde erfolgreich in die Tabelle geschrieben.")
-        except Exception as e:
-            error_msg = f"Fehler beim Schreiben in Tabelle: {str(e)}"
-            bot.send_message(message.chat.id, error_msg)
-            print(error_msg)
-    else:
-        bot.send_message(message.chat.id, "Kein Zugriff auf die Google Tabelle.")
-
-@bot.message_handler(func=lambda message: message.text is not None)
-def handle_all_messages(message):
-    if sheet:
-        try:
-            user = f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip()
-            text = message.text
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            sheet.append_row([user, text, now])
-            bot.send_message(message.chat.id, "Gespeichert!")
-            print(f"Nachricht gespeichert: {user} | {text} | {now}")
-        except Exception as e:
-            bot.send_message(message.chat.id, f"Fehler beim Speichern: {str(e)}")
-            print(f"Fehler beim Speichern: {str(e)}")
-    else:
-        bot.send_message(message.chat.id, "Fehler: Tabelle nicht geladen.")
-def handle_message(message):
-    if sheet:
-        try:
-            user = f"{message.from_user.first_name} {message.from_user.last_name or ''}".strip()
-            text = message.text
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            sheet.append_row([user, text, now])
-            bot.send_message(message.chat.id, "Nachricht empfangen und gespeichert.")
-        except Exception as e:
-            error_msg = f"Fehler beim Speichern: {str(e)}"
-            bot.send_message(message.chat.id, error_msg)
-            print(error_msg)
-    else:
-        bot.send_message(message.chat.id, "Fehler: Tabelle konnte nicht geladen werden.")
-
-bot.polling()
+# === Bot starten ===
+if __name__ == "__main__":
+    executor.start_polling(dp, skip_updates=True)
