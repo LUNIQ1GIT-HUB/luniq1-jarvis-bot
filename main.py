@@ -11,7 +11,7 @@ from aiogram.utils import executor
 logging.basicConfig(level=logging.INFO)
 
 # === Telegram Bot Token & Google Sheets Setup ===
-BOT_TOKEN = os.environ["BOT_TOKEN"]
+BOT_TOKEN = os.environ["TELEGRAM_TOKEN"]
 SPREADSHEET_ID = "14d4S1lpXz_vEZa8BnAwISzAjiWia6XmCH4T9KcxOsBo"
 SHEET_NAME = "LUNIQ1_Memory_Main"
 
